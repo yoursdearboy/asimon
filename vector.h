@@ -56,8 +56,11 @@ int vector_move_assign(Vector* destination, Vector* source);
 
 int vector_swap(Vector* destination, Vector* source);
 
-/* Combine */
+/* Combine Constructor */
 int vector_combine(Vector* destination, Vector* source1, Vector* source2);
+
+/* Combine Assignment */
+int vector_combine_assign(Vector* destination, Vector* source);
 
 /* Destructor */
 int vector_destroy(Vector* vector);

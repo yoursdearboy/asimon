@@ -134,6 +134,24 @@ int vector_combine(Vector* destination, Vector* source1, Vector* source2) {
     return VECTOR_SUCCESS;
 }
 
+int vector_combine_assign(Vector* destination, Vector* source) {
+    assert(destination != NULL);
+    assert(source != NULL);
+    assert(vector_is_initialized(destination));
+    assert(vector_is_initialized(source));
+    assert(destination->element_size == source->element_size);
+
+    if (destination == NULL) return VECTOR_ERROR;
+    if (source == NULL) return VECTOR_ERROR;
+    if (destination->element_size != source->element_size) return VECTOR_ERROR;
+
+    size_t offset = vector_byte_size(destination);
+    vector_resize(destination, destination->size + source->size);
+    memcpy(destination->data + offset, source->data, vector_byte_size(source));
+
+    return VECTOR_SUCCESS;
+}
+
 int vector_destroy(Vector* vector) {
     assert(vector != NULL);
 
