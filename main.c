@@ -3,6 +3,9 @@
 #include <sys/param.h>
 #include <math.h>
 #include <memory.h>
+#ifdef _OPENMP
+    #include <omp.h>
+#endif
 #include "gsl/gsl_randist.h"
 #include "gsl/gsl_cdf.h"
 #include "vector.h"
@@ -80,7 +83,13 @@ int main() {
     Vector all_params;
     vector_setup(&all_params, 1000, sizeof(params));
 
+    #ifdef _OPENMP
+        omp_set_nested(1);
+    #endif
+
+    #pragma omp parallel for
     for (unsigned int m = m_range.a; m <= m_range.b; m++) {
+        #pragma omp parallel for
         for (unsigned int n = m+1; n <= n_range.b; n++) {
             for (unsigned int n1 = 1; n1 <= MIN(m,n)-1; n1++) {
                 for (unsigned int s1 = 0; s1 <= n1; s1++) {
@@ -134,6 +143,7 @@ int main() {
                                     r = r1 + 1 + i;
                                     if (check_a(s1, r1, n1, s, m, r, n, p0, a)) {
                                         params params = {s1, r1, n1, s, m, r, n};
+                                        #pragma omp critical
                                         vector_push_back(&all_params, &params);
                                         break;
                                     }
