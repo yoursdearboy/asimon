@@ -90,7 +90,7 @@ int main() {
     #pragma omp parallel for
     for (unsigned int m = m_range.a; m <= m_range.b; m++) {
         #pragma omp parallel for
-        for (unsigned int n = m+1; n <= n_range.b; n++) {
+        for (unsigned int n = n_range.a; n <= n_range.b; n++) {
             for (unsigned int n1 = 1; n1 <= MIN(m,n)-1; n1++) {
                 for (unsigned int s1 = 0; s1 <= n1; s1++) {
                     if (s1+1 > n1) continue;
@@ -100,6 +100,8 @@ int main() {
 
                         lines = n - (r1+1);
                         columns = m - (s1+1);
+                        if (lines < 1 || columns < 1) continue;
+
                         int res[lines][columns];
                         memset(res, 0, sizeof res);
 
@@ -138,7 +140,7 @@ int main() {
 
                         for (j = 0; j < columns; j++) {
                             s = s1 + 1 + j;
-                            for (i = lines-1; i > 0; i--) {
+                            for (i = lines-1; i != -1; i--) {
                                 if (res[i][j] == 1) {
                                     r = r1 + 1 + i;
                                     if (check_a(s1, r1, n1, s, m, r, n, p0, a)) {
