@@ -10,6 +10,8 @@
 #include "gsl/gsl_cdf.h"
 #include "vector.h"
 
+#define RESULTS_SIZE 5
+
 double g(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, unsigned int r, unsigned int n, float p) {
     unsigned int m2 = m - n1;
     unsigned int n2 = n - n1;
@@ -45,6 +47,55 @@ typedef struct {
     double a, b1, b2;
     double en0, en1, en2;
 } params;
+
+// does p1 better b2?
+bool optimal_comparison_1(params * p1, params * p2) {
+    return p1->en0 < p2->en0;
+}
+
+bool optimal_comparison_2(params * p1, params * p2) {
+    return MAX(MAX(p1->en0, p1->en1), p1->en2) < MAX(MAX(p2->en0, p2->en1), p2->en2);
+}
+
+bool optimal_comparison_3(params * p1, params * p2) {
+    int p1_nm = MAX(p1->n, p1->m);
+    int p2_nm = MAX(p2->n, p2->m);
+    return (p1_nm < p2_nm) || (p1_nm == p2_nm && p1->en0 < p2->en0);
+}
+
+bool optimal_comparison_4(params * p1, params * p2) {
+    int p1_nm = MAX(p1->n, p1->m);
+    int p2_nm = MAX(p2->n, p2->m);
+    return (p1_nm < p2_nm) ||
+        (p1_nm == p2_nm &&
+            MAX(MAX(p1->en0, p1->en1), p1->en2) < MAX(MAX(p2->en0, p2->en1), p2->en2));
+}
+
+void select_optimal_results(Vector * all_params, params ** opt_params, bool (* comparison_func)(params *, params *)) {
+    for (unsigned int i = 0; i < all_params->size; i++) {
+        params * p = vector_get(all_params, i);
+        for (unsigned int j = 0; j < RESULTS_SIZE; j++) {
+            params * c = opt_params[j];
+            if (c == NULL || (* comparison_func)(p, c)) {
+                params * tmp = opt_params[j];
+                opt_params[j] = p;
+                p = tmp;
+            }
+        }
+    }
+}
+
+void print_results(params ** results) {
+    for (int i = 0; i < RESULTS_SIZE; i++) {
+        params p = * results[i];
+        printf("%d %d %d | %d %d | %d %d | %.3f %.3f %.3f | %.2f %.2f %.2f\n",
+               p.s1, p.r1, p.n1,
+               p.s, p.m,
+               p.r, p.n,
+               p.a, p.b1, p.b2,
+               p.en0, p.en1, p.en2);
+    }
+}
 
 int main() {
     unsigned int n1, n2;
@@ -150,10 +201,27 @@ int main() {
         }
     }
 
-    VECTOR_FOR_EACH(&all_params, i) {
-        params p = ITERATOR_GET_AS(params, &i);
-        printf("%d %d %d %d %d\n", p.s1, p.r1, p.n1, p.s, p.r);
-    }
+    params * opt_params_1[RESULTS_SIZE];
+    select_optimal_results(&all_params, opt_params_1, optimal_comparison_1);
+    print_results(opt_params_1);
+
+    printf("\n");
+
+    params * opt_params_2[RESULTS_SIZE];
+    select_optimal_results(&all_params, opt_params_2, optimal_comparison_2);
+    print_results(opt_params_2);
+
+    printf("\n");
+
+    params * opt_params_3[RESULTS_SIZE];
+    select_optimal_results(&all_params, opt_params_3, optimal_comparison_3);
+    print_results(opt_params_3);
+
+    printf("\n");
+
+    params * opt_params_4[RESULTS_SIZE];
+    select_optimal_results(&all_params, opt_params_4, optimal_comparison_4);
+    print_results(opt_params_4);
 
     return 0;
 }
