@@ -30,30 +30,6 @@ double en(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int m2, un
             (1 - gsl_cdf_binomial_P(r1, p, n1)) * n2;
 }
 
-bool check_b1(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, unsigned int r, unsigned int n, float p1, float b1) {
-    if (g(s1, r1, n1, s, m, r, n, p1) <= b1) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool check_b2(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, unsigned int r, unsigned int n, float p2, float b2) {
-    if (g(s1, r1, n1, s, m, r, n, p2) <= b2) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
-bool check_a(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, unsigned int r, unsigned int n, float p0, float a) {
-    if (g(s1, r1, n1, s, m, r, n, p0) > (1-a)) {
-        return true;
-    } else {
-        return false;
-    }
-}
-
 typedef struct {
     unsigned int a, b;
 } range;
@@ -66,15 +42,17 @@ range asmn_range(unsigned int n) {
 
 typedef struct {
     unsigned int s1, r1, n1, s, m, r, n;
+    double a, b1, b2;
+    double en0, en1, en2;
 } params;
 
 int main() {
     unsigned int n1, n2;
-    float a, b1, b2;
+    float a_max, b1_max, b2_max;
     float p0, p1, p2;
 
     n1 = 29; n2 = 30;
-    a = 0.05; b1 = 0.2; b2 = 0.1;
+    a_max = 0.05; b1_max = 0.2; b2_max = 0.1;
     p0 = 0.05; p1 = 0.20; p2 = 0.25;
 
     range m_range = asmn_range(n1);
@@ -103,6 +81,9 @@ int main() {
                         if (lines < 1 || columns < 1) continue;
 
                         int res[lines][columns];
+                        double a;
+                        double b1[lines][columns];
+                        double b2[lines][columns];
                         memset(res, 0, sizeof res);
 
                         unsigned int r, s;
@@ -129,9 +110,14 @@ int main() {
                                 }
                                 if (jcheck) continue;
 
-                                if (check_b1(s1, r1, n1, s, m, r, n, p1, b1) &&
-                                    check_b2(s1, r1, n1, s, m, r, n, p2, b2)) {
-                                    res[i][j] = 1;
+                                b1[i][j] = g(s1, r1, n1, s, m, r, n, p1);
+                                if (b1[i][j] <= b1_max) {
+                                    b2[i][j] = g(s1, r1, n1, s, m, r, n, p2);
+                                    if (b2[i][j] <= b2_max) {
+                                        res[i][j] = 1;
+                                    } else {
+                                        res[i][j] = -1;
+                                    }
                                 } else {
                                     res[i][j] = -1;
                                 }
@@ -143,8 +129,14 @@ int main() {
                             for (i = lines-1; i != -1; i--) {
                                 if (res[i][j] == 1) {
                                     r = r1 + 1 + i;
-                                    if (check_a(s1, r1, n1, s, m, r, n, p0, a)) {
-                                        params params = {s1, r1, n1, s, m, r, n};
+                                    a = 1 - g(s1, r1, n1, s, m, r, n, p0);
+                                    if (a <= a_max) {
+                                        double en0 = en(s1, r1, n1, m - n1, n - n1, p0);
+                                        double en1 = en(s1, r1, n1, m - n1, n - n1, p1);
+                                        double en2 = en(s1, r1, n1, m - n1, n - n1, p2);
+                                        params params = {s1, r1, n1, s, m, r, n,
+                                                         a, b1[i][j], b2[i][j],
+                                                         en0, en1, en2};
                                         #pragma omp critical
                                         vector_push_back(&all_params, &params);
                                         break;
