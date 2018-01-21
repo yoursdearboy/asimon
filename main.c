@@ -73,12 +73,12 @@ int main() {
     float a, b1, b2;
     float p0, p1, p2;
 
-    n1 = 29; n2 = 41;
+    n1 = 29; n2 = 30;
     a = 0.05; b1 = 0.2; b2 = 0.1;
     p0 = 0.05; p1 = 0.20; p2 = 0.25;
 
-    range n_range = asmn_range(n1);
-    range m_range = asmn_range(n2);
+    range m_range = asmn_range(n1);
+    range n_range = asmn_range(n2);
 
     Vector all_params;
     vector_setup(&all_params, 1000, sizeof(params));
