@@ -9,10 +9,13 @@
 #include "gsl/gsl_randist.h"
 #include "gsl/gsl_cdf.h"
 #include "vector.h"
+#include <R.h>
+#include <Rinternals.h>
 
 #define RANGE_A 0.5
 #define RANGE_B 1.5
-#define RESULTS_SIZE 5
+#define RESULTS_SIZE 10
+#define RESULTS_NCOL 13
 
 double g(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, unsigned int r, unsigned int n, float p) {
     unsigned int m2 = m - n1;
@@ -28,10 +31,34 @@ double g(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsi
     return res;
 }
 
+SEXP g_facade(SEXP s1, SEXP r1, SEXP n1, SEXP s, SEXP m, SEXP r, SEXP n, SEXP p) {
+    SEXP result = PROTECT(allocVector(REALSXP, 1));
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wsign-conversion"
+    REAL(result)[0] = g(asInteger(s1), asInteger(r1), asInteger(n1),
+                        asInteger(s), asInteger(m),
+                        asInteger(r), asInteger(n),
+                        (float) asReal(p));
+    #pragma clang diagnostic pop
+    UNPROTECT(1);
+    return result;
+}
+
 double en(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int m2, unsigned int n2, float p) {
     return n1 +
             (gsl_cdf_binomial_P(r1, p , n1) - gsl_cdf_binomial_P(s1, p, n1)) * m2 +
             (1 - gsl_cdf_binomial_P(r1, p, n1)) * n2;
+}
+
+SEXP en_facade(SEXP s1, SEXP r1, SEXP n1, SEXP m2, SEXP n2, SEXP p) {
+    SEXP result = PROTECT(allocVector(REALSXP, 1));
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wsign-conversion"
+    REAL(result)[0] = en(asInteger(s1), asInteger(r1), asInteger(n1),
+                         asInteger(m2), asInteger(n2), (float) asReal(p));
+    #pragma clang diagnostic pop
+    UNPROTECT(1);
+    return result;
 }
 
 typedef struct {
@@ -73,7 +100,7 @@ bool optimal_comparison_4(params * p1, params * p2) {
             MAX(MAX(p1->en0, p1->en1), p1->en2) < MAX(MAX(p2->en0, p2->en1), p2->en2));
 }
 
-void select_optimal_results(Vector * all_params, params ** opt_params, bool (* comparison_func)(params *, params *)) {
+void select_optimal_results(Vector * all_params, params * opt_params[], bool (* comparison_func)(params *, params *)) {
     for (unsigned int i = 0; i < all_params->size; i++) {
         params * p = vector_get(all_params, i);
         for (unsigned int j = 0; j < RESULTS_SIZE; j++) {
@@ -87,32 +114,9 @@ void select_optimal_results(Vector * all_params, params ** opt_params, bool (* c
     }
 }
 
-void print_results(params ** results) {
-    for (int i = 0; i < RESULTS_SIZE; i++) {
-        params p = * results[i];
-        printf("%d %d %d | %d %d | %d %d | %.3f %.3f %.3f | %.2f %.2f %.2f\n",
-               p.s1, p.r1, p.n1,
-               p.s, p.m,
-               p.r, p.n,
-               p.a, p.b1, p.b2,
-               p.en0, p.en1, p.en2);
-    }
-}
-
-int main() {
-    unsigned int n1, n2;
-    float a_max, b1_max, b2_max;
-    float p0, p1, p2;
-
-    n1 = 29; n2 = 30;
-    a_max = 0.05; b1_max = 0.2; b2_max = 0.1;
-    p0 = 0.05; p1 = 0.20; p2 = 0.25;
-
+void asimon(Vector * all_params, unsigned int n1, unsigned int n2, float a_max, float b1_max, float b2_max, float p0, float p1, float p2) {
     range m_range = asmn_range(n1);
     range n_range = asmn_range(n2);
-
-    Vector all_params;
-    vector_setup(&all_params, 1000, sizeof(params));
 
     #ifdef _OPENMP
         omp_set_nested(1);
@@ -191,7 +195,7 @@ int main() {
                                                          a, b1[i][j], b2[i][j],
                                                          en0, en1, en2};
                                         #pragma omp critical
-                                        vector_push_back(&all_params, &params);
+                                        vector_push_back(all_params, &params);
                                         break;
                                     }
                                 }
@@ -202,26 +206,102 @@ int main() {
             }
         }
     }
+}
 
-    params * opt_params_1[RESULTS_SIZE];
+SEXP fill_results(params ** results_params) {
+    SEXP results = PROTECT(allocMatrix(REALSXP, RESULTS_SIZE, RESULTS_NCOL));
+    double * rresults = REAL(results);
+    for (int i = 0; i < RESULTS_SIZE; i++) {
+        params * p = results_params[i];
+        rresults[i + RESULTS_SIZE * 0] = p->s1;
+        rresults[i + RESULTS_SIZE * 1] = p->r1;
+        rresults[i + RESULTS_SIZE * 2] = p->n1;
+        rresults[i + RESULTS_SIZE * 3] = p->s;
+        rresults[i + RESULTS_SIZE * 4] = p->m;
+        rresults[i + RESULTS_SIZE * 5] = p->r;
+        rresults[i + RESULTS_SIZE * 6] = p->n;
+        rresults[i + RESULTS_SIZE * 7] = p->a;
+        rresults[i + RESULTS_SIZE * 8] = p->b1;
+        rresults[i + RESULTS_SIZE * 9] = p->b2;
+        rresults[i + RESULTS_SIZE * 10] = p->en0;
+        rresults[i + RESULTS_SIZE * 11] = p->en1;
+        rresults[i + RESULTS_SIZE * 12] = p->en2;
+    }
+    return results;
+}
+
+SEXP asimon_facade(SEXP n1, SEXP n2, SEXP a_max, SEXP b1_max, SEXP b2_max, SEXP p0, SEXP p1, SEXP p2) {
+    Vector all_params;
+    vector_setup(&all_params, 1000, sizeof(params));
+
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wsign-conversion"
+    asimon(&all_params,
+           asInteger(n1), asInteger(n2),
+           (float) asReal(a_max), (float) asReal(b1_max), (float) asReal(b2_max),
+           (float) asReal(p0), (float) asReal(p1), (float) asReal(p2));
+    #pragma clang diagnostic pop
+
+    SEXP result = PROTECT(allocVector(VECSXP, 4));
+
+    params ** opt_params_1 = calloc(RESULTS_SIZE, sizeof(** opt_params_1));
+    select_optimal_results(&all_params, opt_params_1, optimal_comparison_1);
+    SET_VECTOR_ELT(result, 0, fill_results(opt_params_1));
+
+    params ** opt_params_2 = calloc(RESULTS_SIZE, sizeof(** opt_params_2));
+    select_optimal_results(&all_params, opt_params_2, optimal_comparison_2);
+    SET_VECTOR_ELT(result, 1, fill_results(opt_params_2));
+
+    params ** opt_params_3 = calloc(RESULTS_SIZE, sizeof(** opt_params_3));
+    select_optimal_results(&all_params, opt_params_3, optimal_comparison_3);
+    SET_VECTOR_ELT(result, 2, fill_results(opt_params_3));
+
+    params ** opt_params_4 = calloc(RESULTS_SIZE, sizeof(** opt_params_4));
+    select_optimal_results(&all_params, opt_params_4, optimal_comparison_4);
+    SET_VECTOR_ELT(result, 3, fill_results(opt_params_4));
+
+    UNPROTECT(5);
+
+    return result;
+}
+
+void print_results(params ** results) {
+    for (int i = 0; i < RESULTS_SIZE; i++) {
+        params * p = results[i];
+        printf("%d %d %d | %d %d | %d %d | %.3f %.3f %.3f | %.2f %.2f %.2f\n",
+               p->s1, p->r1, p->n1,
+               p->s, p->m,
+               p->r, p->n,
+               p->a, p->b1, p->b2,
+               p->en0, p->en1, p->en2);
+    }
+}
+
+int main() {
+    Vector all_params;
+    vector_setup(&all_params, 1000, sizeof(params));
+
+    asimon(&all_params, 29, 30, 0.05, 0.2, 0.1, 0.05, 0.2, 0.25);
+
+    params ** opt_params_1 = calloc(RESULTS_SIZE, sizeof(** opt_params_1));
     select_optimal_results(&all_params, opt_params_1, optimal_comparison_1);
     print_results(opt_params_1);
 
     printf("\n");
 
-    params * opt_params_2[RESULTS_SIZE];
+    params ** opt_params_2 = calloc(RESULTS_SIZE, sizeof(** opt_params_2));
     select_optimal_results(&all_params, opt_params_2, optimal_comparison_2);
     print_results(opt_params_2);
 
     printf("\n");
 
-    params * opt_params_3[RESULTS_SIZE];
+    params ** opt_params_3 = calloc(RESULTS_SIZE, sizeof(** opt_params_3));
     select_optimal_results(&all_params, opt_params_3, optimal_comparison_3);
     print_results(opt_params_3);
 
     printf("\n");
 
-    params * opt_params_4[RESULTS_SIZE];
+    params ** opt_params_4 = calloc(RESULTS_SIZE, sizeof(** opt_params_4));
     select_optimal_results(&all_params, opt_params_4, optimal_comparison_4);
     print_results(opt_params_4);
 
