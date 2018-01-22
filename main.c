@@ -10,6 +10,8 @@
 #include "gsl/gsl_cdf.h"
 #include "vector.h"
 
+#define RANGE_A 0.5
+#define RANGE_B 1.5
 #define RESULTS_SIZE 5
 
 double g(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, unsigned int r, unsigned int n, float p) {
@@ -37,8 +39,8 @@ typedef struct {
 } range;
 
 range asmn_range(unsigned int n) {
-    range r = {(unsigned int) floor(0.85 * n),
-               (unsigned int) ceil(1.5 * n)};
+    range r = {(unsigned int) floor(RANGE_A * n),
+               (unsigned int) ceil(RANGE_B * n)};
     return r;
 }
 
