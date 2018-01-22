@@ -1,7 +1,7 @@
 # IDEA
 .idea
 
-# CMake
-cmake-build-debug/
-cmake-build-release/
+# R
 .Rproj.user
+.Rhistory
+.RData
