@@ -1,0 +1,12 @@
+Package: asimon
+Title: Adaptive two-stage Simon's design for clinical trials
+Version: 0.0.0.9000
+Authors@R: person("Kirill", "Voronin", email = "yoursdearboy@gmail.com", role = c("cre"))
+Description: Calculates parameters for adaptive version of two-stage Simon's design. See paper for more info.\nLin, Yong, and Weichung J. Shih. "Adaptive Two‐Stage Designs for Single‐Arm Phase IIA Cancer Clinical Trials." Biometrics 60, no. 2 (2004): 482-490.
+Depends: R (>= 3.4.1)
+License: MIT
+Encoding: UTF-8
+NeedsCompilation: yes
+LazyData: true
+Imports:
+  clinfun
