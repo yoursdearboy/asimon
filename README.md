@@ -25,6 +25,16 @@ SHLIB_OPENMP_FFLAGS= -fopenmp
 
 ## Installation
 
+Using `devtools`:
+
+```
+install.packages('devtools') # if you don't have it
+library(devtools)
+devtools::install_github('yoursdearboy/asimon')
+```
+
+Or manually:
+
 ```
 # clone using git (or you can download archive and unzip it)
 git clone https://github.com/yoursdearboy/asimon
