@@ -14,6 +14,15 @@ asimon_calculate <- function(n1, n2, a_max, b1_max, b2_max, p0, p1, p2) {
     .Call('asimon_facade', n1, n2, a_max, b1_max, b2_max, p0, p1, p2, PACKAGE = packageName())
 }
 
+#' Calculates parameters for adaptive two-stage Simon's design for clinical trials.
+#'
+#' @param a_max type I error constraint.
+#' @param b1_max, b2_max type II error constraints for stages 1 and 2.
+#' @param p0 null hypothesis response rate.
+#' @param p1, p2 alternative hypothesis rates.
+#' @return List of 4 elements for each type of optimality.
+#' @examples
+#' asimon(0.05, 0.2, 0.1, 0.05, 0.2, 0.25)
 #' @export
 asimon <- function(a_max, b1_max, b2_max, p0, p1, p2) {
     simon.n1 <- clinfun::ph2simon(p0, p1, a_max, b1_max)

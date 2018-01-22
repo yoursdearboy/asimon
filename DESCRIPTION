@@ -10,3 +10,4 @@ NeedsCompilation: yes
 LazyData: true
 Imports:
   clinfun
+RoxygenNote: 6.0.1
