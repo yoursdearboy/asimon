@@ -44,27 +44,49 @@ SEXP g_facade(SEXP s1, SEXP r1, SEXP n1, SEXP s, SEXP m, SEXP r, SEXP n, SEXP p)
     return result;
 }
 
-double g1(unsigned int s1, unsigned int n1, float p) {
-    return gsl_cdf_binomial_P(s1, p, n1);
+double g1(unsigned int s1, unsigned int n1, float p,
+          double * cache, int n1_size) {
+    double * cached = (cache + s1 * n1_size + n1);
+    if (! * cached) {
+        * cached = gsl_cdf_binomial_P(s1, p, n1);
+    }
+    return * cached;
 }
 
-double g2(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, float p) {
-    unsigned int m2 = m - n1;
-    double res = 0;
-    for (unsigned int x = s1+1; x <= MIN(r1, s); x++) {
-        res += gsl_ran_binomial_pdf(x, p, n1) * gsl_cdf_binomial_P(s-x, p, m2);
+double g2(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, float p,
+          double * cache, int n1_size, int s_size, int m_size, int m_offset) {
+    double * cached = (cache + s1 * n1_size * n1_size * s_size * m_size
+                             + r1 * n1_size * s_size * m_size
+                             + n1 * s_size * m_size
+                             + s * m_size
+                             + (m - m_offset));
+    if (! * cached) {
+        unsigned int m2 = m - n1;
+        double res = 0;
+        for (unsigned int x = s1+1; x <= MIN(r1, s); x++) {
+            res += gsl_ran_binomial_pdf(x, p, n1) * gsl_cdf_binomial_P(s-x, p, m2);
+        }
+        * cached = res;
     }
-    return res;
+    return * cached;
 }
 
-double g3(unsigned int r1, unsigned int n1, unsigned int r, unsigned int n, float p) {
-    unsigned int n2 = n - n1;
-    double res;
-    res = 0;
-    for (unsigned int x = r1+1; x <= MIN(r, n1); x++) {
-        res += gsl_ran_binomial_pdf(x, p, n1) * gsl_cdf_binomial_P(r-x, p, n2);
+double g3(unsigned int r1, unsigned int n1, unsigned int r, unsigned int n, float p,
+          double * cache, int n1_size, int r_size, int n_size, int n_offset) {
+    double * cached = (cache + r1 * n1_size * r_size * n_size
+                             + n1 * r_size * n_size
+                             + r * n_size
+                             + (n - n_offset));
+    if (! * cached) {
+        unsigned int n2 = n - n1;
+        double res;
+        res = 0;
+        for (unsigned int x = r1+1; x <= MIN(r, n1); x++) {
+            res += gsl_ran_binomial_pdf(x, p, n1) * gsl_cdf_binomial_P(r-x, p, n2);
+        }
+        * cached = res;
     }
-    return res;
+    return * cached;
 }
 
 double en(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int m2, unsigned int n2, float p) {
@@ -141,6 +163,28 @@ void asimon(Vector * all_params, unsigned int n1, unsigned int n2, float a_max, 
     range m_range = asmn_range(n1);
     range n_range = asmn_range(n2);
 
+    int n1_size = MIN(m_range.b, n_range.b);
+    int s_size = m_range.b + 1;
+    int m_size = m_range.b - m_range.a + 1;
+    int r_size = n_range.b + 1;
+    int n_size = n_range.b - n_range.a + 1;
+
+    int64_t b_1_cache_size = n1_size * n1_size;
+    int64_t b_2_cache_size = (int64_t) n1_size * n1_size * n1_size * s_size * m_size;
+    int64_t b_3_cache_size = n1_size * n1_size * r_size * n_size;
+    double * b1_1_cache = (double *) malloc(b_1_cache_size * sizeof(double));
+    double * b2_1_cache = (double *) malloc(b_1_cache_size * sizeof(double));
+    double * b1_2_cache = (double *) malloc(b_2_cache_size * sizeof(double));
+    double * b2_2_cache = (double *) malloc(b_2_cache_size * sizeof(double));
+    double * b1_3_cache = (double *) malloc(b_3_cache_size * sizeof(double));
+    double * b2_3_cache = (double *) malloc(b_3_cache_size * sizeof(double));
+    memset(b1_1_cache, 0, b_1_cache_size);
+    memset(b2_1_cache, 0, b_1_cache_size);
+    memset(b1_2_cache, 0, b_2_cache_size);
+    memset(b2_2_cache, 0, b_2_cache_size);
+    memset(b1_3_cache, 0, b_3_cache_size);
+    memset(b2_3_cache, 0, b_3_cache_size);
+
     #ifdef _OPENMP
         omp_set_nested(1);
     #endif
@@ -152,9 +196,9 @@ void asimon(Vector * all_params, unsigned int n1, unsigned int n2, float a_max, 
             for (unsigned int n1 = 1; n1 <= MIN(m,n)-1; n1++) {
                 for (unsigned int s1 = 0; s1 <= n1; s1++) {
                     if (s1+1 > n1) continue;
-                    double b1_1 = g1(s1, n1, p1);
+                    double b1_1 = g1(s1, n1, p1, b1_1_cache, n1_size);
                     if (b1_1 > b1_max) continue;
-                    double b2_1 = g1(s1, n1, p2);
+                    double b2_1 = g1(s1, n1, p2, b2_1_cache, n1_size);
                     if (b2_1 > b2_max) continue;
                     for (unsigned int r1 = s1+1; r1 <= n1; r1++) {
                         int r_bot = r1 + 1;
@@ -163,9 +207,9 @@ void asimon(Vector * all_params, unsigned int n1, unsigned int n2, float a_max, 
 
                         unsigned int r, s;
                         for (s = s1 + 1; s <= m; s++) {
-                            double b1_2 = b1_1 + g2(s1, r1, n1, s, m, p1);
+                            double b1_2 = b1_1 + g2(s1, r1, n1, s, m, p1, b1_2_cache, n1_size, s_size, m_size, m_range.a);
                             if (b1_2 > b1_max) continue;
-                            double b2_2 = b2_1 + g2(s1, r1, n1, s, m, p2);
+                            double b2_2 = b2_1 + g2(s1, r1, n1, s, m, p2, b2_2_cache, n1_size, s_size, m_size, m_range.a);
                             if (b2_2 > b2_max) continue;
                             int r_a = r_bot;
                             int r_b = r_up;
@@ -175,20 +219,20 @@ void asimon(Vector * all_params, unsigned int n1, unsigned int n2, float a_max, 
                                 r = ceil((r_a + r_b) / 2.0f);
                                 if (checked && r == r_up) break;
                                 checked = true;
-                                b1_3 = b1_2 + g3(r1, n1, r, n, p1);
+                                b1_3 = b1_2 + g3(r1, n1, r, n, p1, b1_3_cache, n1_size, r_size, n_size, n_range.a);
                                 if (b1_3 > b1_max) {
                                     r_up = r_b = r;
                                     continue;
                                 }
-                                b2_3 = b2_2 + g3(r1, n1, r, n, p2);
+                                b2_3 = b2_2 + g3(r1, n1, r, n, p2, b2_3_cache, n1_size, r_size, n_size, n_range.a);
                                 if (b2_3 > b2_max) {
                                     r_up = r_b = r;
                                     continue;
                                 }
                                 r_a = r;
                             }
-                            b1 = b1_2 + g3(r1, n1, r_up - 1, n, p1);
-                            b2 = b2_2 + g3(r1, n1, r_up - 1, n, p2);
+                            b1 = b1_2 + g3(r1, n1, r_up - 1, n, p1, b1_3_cache, n1_size, r_size, n_size, n_range.a);
+                            b2 = b2_2 + g3(r1, n1, r_up - 1, n, p2, b2_3_cache, n1_size, r_size, n_size, n_range.a);
                             if (b1 > b1_max || b2 > b2_max) continue;
                             if (r_up - 1 == r1) break;
                             a = 1 - g(s1, r1, n1, s, m, r_up - 1, n, p0);
