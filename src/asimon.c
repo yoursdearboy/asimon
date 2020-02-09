@@ -12,7 +12,7 @@
 #include <R.h>
 #include <Rinternals.h>
 
-#define RANGE_A 0.75
+#define RANGE_A 0.85
 #define RANGE_B 1.5
 #define RESULTS_SIZE 10
 #define RESULTS_NCOL 13
