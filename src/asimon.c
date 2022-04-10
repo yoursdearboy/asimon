@@ -12,7 +12,7 @@
 #include <R.h>
 #include <Rinternals.h>
 
-#define RANGE_A 0.5
+#define RANGE_A 0.85
 #define RANGE_B 1.5
 #define RESULTS_SIZE 10
 #define RESULTS_NCOL 13
@@ -42,6 +42,29 @@ SEXP g_facade(SEXP s1, SEXP r1, SEXP n1, SEXP s, SEXP m, SEXP r, SEXP n, SEXP p)
     #pragma clang diagnostic pop
     UNPROTECT(1);
     return result;
+}
+
+double g1(unsigned int s1, unsigned int n1, float p) {
+    return gsl_cdf_binomial_P(s1, p, n1);
+}
+
+double g2(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int s, unsigned int m, float p) {
+    unsigned int m2 = m - n1;
+    double res = 0;
+    for (unsigned int x = s1+1; x <= MIN(r1, s); x++) {
+        res += gsl_ran_binomial_pdf(x, p, n1) * gsl_cdf_binomial_P(s-x, p, m2);
+    }
+    return res;
+}
+
+double g3(unsigned int r1, unsigned int n1, unsigned int r, unsigned int n, float p) {
+    unsigned int n2 = n - n1;
+    double res;
+    res = 0;
+    for (unsigned int x = r1+1; x <= MIN(r, n1); x++) {
+        res += gsl_ran_binomial_pdf(x, p, n1) * gsl_cdf_binomial_P(r-x, p, n2);
+    }
+    return res;
 }
 
 double en(unsigned int s1, unsigned int r1, unsigned int n1, unsigned int m2, unsigned int n2, float p) {
@@ -129,76 +152,56 @@ void asimon(Vector * all_params, unsigned int n1, unsigned int n2, float a_max, 
             for (unsigned int n1 = 1; n1 <= MIN(m,n)-1; n1++) {
                 for (unsigned int s1 = 0; s1 <= n1; s1++) {
                     if (s1+1 > n1) continue;
-                    for(unsigned int r1 = s1+1; r1 <= n1; r1++) {
-                        unsigned int i, j, ic, jc, lines, columns;
-                        bool icheck, jcheck;
-
-                        lines = n - (r1+1);
-                        columns = m - (s1+1);
-                        if (lines < 1 || columns < 1) continue;
-
-                        int res[lines][columns];
-                        double a;
-                        double b1[lines][columns];
-                        double b2[lines][columns];
-                        memset(res, 0, sizeof res);
+                    double b1_1 = g1(s1, n1, p1);
+                    if (b1_1 > b1_max) continue;
+                    double b2_1 = g1(s1, n1, p2);
+                    if (b2_1 > b2_max) continue;
+                    for (unsigned int r1 = s1+1; r1 <= n1; r1++) {
+                        int r_bot = r1 + 1;
+                        int r_up = n;
+                        double a, b1, b2;
 
                         unsigned int r, s;
-                        for (i = 0; i < lines; i++) {
-                            r = r1 + 1 + i;
-                            for (j = 0; j < columns; j++) {
-                                s = s1 + 1 + j;
-
-                                icheck = false;
-                                for (ic = 0; ic < i; ic++) {
-                                    if (res[ic][j] == -1) {
-                                        icheck = true;
-                                        break;
-                                    }
+                        for (s = s1 + 1; s <= m; s++) {
+                            double b1_2 = b1_1 + g2(s1, r1, n1, s, m, p1);
+                            if (b1_2 > b1_max) continue;
+                            double b2_2 = b2_1 + g2(s1, r1, n1, s, m, p2);
+                            if (b2_2 > b2_max) continue;
+                            int r_a = r_bot;
+                            int r_b = r_up;
+                            double b1_3, b2_3;
+                            bool checked = false;
+                            while (true) {
+                                r = ceil((r_a + r_b) / 2.0f);
+                                if (checked && r == r_up) break;
+                                checked = true;
+                                b1_3 = b1_2 + g3(r1, n1, r, n, p1);
+                                if (b1_3 > b1_max) {
+                                    r_up = r_b = r;
+                                    continue;
                                 }
-                                if (icheck) continue;
-
-                                jcheck = false;
-                                for (jc = 0; jc < j; jc++) {
-                                    if (res[i][jc] == -1) {
-                                        jcheck = true;
-                                        break;
-                                    }
+                                b2_3 = b2_2 + g3(r1, n1, r, n, p2);
+                                if (b2_3 > b2_max) {
+                                    r_up = r_b = r;
+                                    continue;
                                 }
-                                if (jcheck) continue;
-
-                                b1[i][j] = g(s1, r1, n1, s, m, r, n, p1);
-                                if (b1[i][j] <= b1_max) {
-                                    b2[i][j] = g(s1, r1, n1, s, m, r, n, p2);
-                                    if (b2[i][j] <= b2_max) {
-                                        res[i][j] = 1;
-                                    } else {
-                                        res[i][j] = -1;
-                                    }
-                                } else {
-                                    res[i][j] = -1;
-                                }
+                                r_a = r;
                             }
-                        }
-
-                        for (j = 0; j < columns; j++) {
-                            s = s1 + 1 + j;
-                            for (i = lines-1; i != -1; i--) {
-                                if (res[i][j] == 1) {
-                                    r = r1 + 1 + i;
-                                    a = 1 - g(s1, r1, n1, s, m, r, n, p0);
-                                    if (a <= a_max) {
-                                        double en0 = en(s1, r1, n1, m - n1, n - n1, p0);
-                                        double en1 = en(s1, r1, n1, m - n1, n - n1, p1);
-                                        double en2 = en(s1, r1, n1, m - n1, n - n1, p2);
-                                        params params = {s1, r1, n1, s, m, r, n,
-                                                         a, b1[i][j], b2[i][j],
-                                                         en0, en1, en2};
-                                        #pragma omp critical
-                                        vector_push_back(all_params, &params);
-                                        break;
-                                    }
-                                }
+                            b1 = b1_2 + g3(r1, n1, r_up - 1, n, p1);
+                            b2 = b2_2 + g3(r1, n1, r_up - 1, n, p2);
+                            if (b1 > b1_max || b2 > b2_max) continue;
+                            if (r_up - 1 == r1) break;
+                            a = 1 - g(s1, r1, n1, s, m, r_up - 1, n, p0);
+                            if (a <= a_max) {
+                                r_bot = r_up;
+                                double en0 = en(s1, r1, n1, m - n1, n - n1, p0);
+                                double en1 = en(s1, r1, n1, m - n1, n - n1, p1);
+                                double en2 = en(s1, r1, n1, m - n1, n - n1, p2);
+                                params params = {s1, r1, n1, s, m, r_up - 1, n,
+                                                    a, b1, b2,
+                                                    en0, en1, en2};
+                                #pragma omp critical
+                                vector_push_back(all_params, &params);
                             }
                         }
                     }
